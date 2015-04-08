@@ -214,7 +214,7 @@ if __name__ == '__main__':
     # end=<year-month-day>
 
     import sys
-    import ConfigParser
+    import configparser
 
     # Set up logger
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', level=logging.INFO,
@@ -230,7 +230,7 @@ if __name__ == '__main__':
 
     try:
         # Parse config file
-        config = ConfigParser.ConfigParser()
+        config = configparser.ConfigParser()
         config.read(config_file)
         mat_number = config.get('CampusOffice', 'mat')
         campus_pass = config.get('CampusOffice', 'pass')
@@ -248,7 +248,7 @@ if __name__ == '__main__':
         calendar = CalDAVAdapter(cal_url, cal_user, cal_pass)
         uploader = CampusCalendarUploader(mat_number, campus_pass, calendar, start_time, end_time)
         uploader.upload()
-    except ConfigParser.NoOptionError as e:
+    except configparser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)
     except (requests.RequestException, CampusOfficeAuthorizationError) as e:
         log.error('Could not retrieve CampusOffice calendar: %s', e)
