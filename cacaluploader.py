@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-import requests
-import logging
 import caldav
 import icalendar
 import itertools
+import logging
+import requests
+from adapter import CalDAVAdapter
 from datetime import datetime, timedelta
 
 log = logging.getLogger(__name__)
@@ -30,15 +31,13 @@ class CampusCalendarUploader(object):
     _campus_cal_url = 'views/calendar/iCalExport.asp?startdt={start:%d.%m.%Y}&enddt={end:%d.%m.%Y} 23:59:59'
     _campus_logout_url = 'system/login/logoff.asp'
 
-    def __init__(self, mat_number, campus_pass, cal_url, cal_user, cal_pass, start_time=None, end_time=None):
+    def __init__(self, mat_number, campus_pass, upload_calendar, start_time=None, end_time=None):
         """
         Initialize object with given values. The default time period if none given is 1 week in the past from today
         to 27 weeks in the future.
         :param mat_number: Matriculation number used for the CampusOffice.
         :param campus_pass: Password for CampusOffice.
-        :param cal_url: URL of CalDAV calendar where events should be uploaded to.
-        :param cal_user: User of CalDAV calendar.
-        :param cal_pass: Password for CALDAV calendar
+        :param upload_calendar: Calendar adapter to upload events to.
         :param start_time: Start date of time period. Default: 1 week in the past from today.
         :param end_time: Start date of time period. Default: 27 weeks in the future from today.
         :raise ValueError: Raised if only one time boundary is provided.
@@ -51,9 +50,7 @@ class CampusCalendarUploader(object):
         # Save parameters
         self.matriculation_number = mat_number
         self.campus_password = campus_pass
-        self.calendar_url = cal_url
-        self.calendar_user = cal_user
-        self.calendar_pass = cal_pass
+        self.upload_calendar = upload_calendar
 
         # If given save time period
         if start_time is not None and end_time is not None:
@@ -110,10 +107,12 @@ class CampusCalendarUploader(object):
         # Remove all components which are no events
         source_events = filter(lambda x: isinstance(x, icalendar.Event), source_cal.subcomponents)
 
-        # Retrieve upload calendar
-        upload_cal = self._retrieve_upload_calendar()
+        # Connect upload calendar
+        log.info('Search for caldav calendar')
+        self.upload_calendar.connect()
+
         # Upload all events to calendar
-        self._upload_events(upload_cal, source_events)
+        self._upload_events(source_events)
 
     def _retrieve_source_calendar(self):
         """
@@ -154,28 +153,7 @@ class CampusCalendarUploader(object):
         req.encoding = 'utf-8'
         return icalendar.Calendar.from_ical(req.text)
 
-    def _retrieve_upload_calendar(self):
-        """
-        Retrieve the CALDav calendar where events should be uploaded.
-        :return :class:`caldav.Calendar` object of searched calendar.
-        :raise caldav.error.AuthorizationError: Raised if username or password are incorrect.
-        :raise caldav.error.NotFoundError: Raised if calendar could not be found.
-        """
-        # Connect to destination
-        log.info('Search for caldav calendar')
-        client = caldav.DAVClient(self.calendar_url, username=self.calendar_user, password=self.calendar_pass)
-        principal = caldav.Principal(client)
-
-        # Search for given calendar
-        for c in principal.calendars():
-            url = str(c.url)
-            if url == self.calendar_url:
-                return c
-
-        # No calendar found (should normally not happen; principal should have raised error)
-        raise caldav.error.NotFoundError('Could not find calendar with given url')
-
-    def _upload_events(self, upload_cal, events):
+    def _upload_events(self, events):
         """
         Upload all given events to caldav calendar and remove all other events in time period.
         :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
@@ -184,26 +162,27 @@ class CampusCalendarUploader(object):
         """
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
-        old_events = upload_cal.date_search(self.start_time, self.end_time)
+        events = list(events)
+        old_event_ids = self.upload_calendar.retrieve_event(self.start_time, self.end_time)
         n = 0
-        for (new, old) in itertools.product(events, old_events):
-            if new['uid'] == old.instance.vevent.uid.value:
+        for (new, old_id) in itertools.product(events, old_event_ids):
+            if new['uid'] == old_id:
                 events.remove(new)
-                old_events.remove(old)
+                old_event_ids.remove(old_id)
                 n += 1
         if n > 0:
             log.info('{n} event(s) where already uploaded'.format(n=n))
 
         # Remove only deprecated events
-        n = len(old_events)
+        n = len(old_event_ids)
         if n > 0:
             log.info('Delete {n} deprecated event(s) in given time period'.format(n=n))
         else:
             log.info('No deprecated event(s) found in calendar')
 
-        for i, ev in enumerate(old_events):
+        for i, uid in enumerate(old_event_ids):
             log.info('Delete event {index}/{num}'.format(index=i+1, num=n))
-            ev.delete()
+            self.upload_calendar.delete_event(uid)
 
         # Upload all events
         n = len(events)
@@ -214,11 +193,7 @@ class CampusCalendarUploader(object):
 
         for i, ev in enumerate(events):
             log.info('Upload event {index}/{num}'.format(index=i+1, num=n))
-            # Get iCal representation of event
-            event_cal = icalendar.Calendar()
-            event_cal.add_component(ev)
-            # Add new event
-            upload_cal.add_event(event_cal.to_ical())
+            self.upload_calendar.add_event(ev['uid'], ev['summary'], ev['dtstart'], ev['dtend'], ev['location'])
         
         log.info('Uploaded all changes')
 
@@ -270,7 +245,8 @@ if __name__ == '__main__':
             end_time = None
 
         # Start upload
-        uploader = CampusCalendarUploader(mat_number, campus_pass, cal_url, cal_user, cal_pass, start_time, end_time)
+        calendar = CalDAVAdapter(cal_url, cal_user, cal_pass)
+        uploader = CampusCalendarUploader(mat_number, campus_pass, calendar, start_time, end_time)
         uploader.upload()
     except ConfigParser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)
