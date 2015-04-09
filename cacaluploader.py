@@ -203,10 +203,14 @@ if __name__ == '__main__':
     # [CampusOffice]
     # mat=<matriculation number>
     # pass=<password>
+    #
+    # [Adapter]
+    # target=caldav
+    #
     # [CalDAV]
     # url=<calendar url>
-    # user=<calendar username>
-    # pass=<password>
+    # username=<calendar username>
+    # password=<password>
     #
     # and optional:
     # [Period]
@@ -234,9 +238,17 @@ if __name__ == '__main__':
         config.read(config_file)
         mat_number = config.get('CampusOffice', 'mat')
         campus_pass = config.get('CampusOffice', 'pass')
-        cal_url = config.get('CalDAV', 'url')
-        cal_user = config.get('CalDAV', 'user')
-        cal_pass = config.get('CalDAV', 'pass')
+
+        target = config.get('Adapter', 'target')
+
+        if target == 'caldav':
+            url = config.get('CalDAV', 'url')
+            username = config.get('CalDAV', 'username')
+            password = config.get('CalDAV', 'password')
+            adapter = CalDAVAdapter(url, username, password)
+        else:
+            raise RuntimeError('Unknown adapter!')
+
         if config.has_section('Period'):
             start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
             end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
@@ -245,8 +257,8 @@ if __name__ == '__main__':
             end_time = None
 
         # Start upload
-        calendar = CalDAVAdapter(cal_url, cal_user, cal_pass)
-        uploader = CampusCalendarUploader(mat_number, campus_pass, calendar, start_time, end_time)
+
+        uploader = CampusCalendarUploader(mat_number, campus_pass, adapter, start_time, end_time)
         uploader.upload()
     except configparser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)
