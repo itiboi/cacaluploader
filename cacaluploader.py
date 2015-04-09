@@ -8,6 +8,7 @@ import logging
 import requests
 from adapter import CalDAVAdapter
 from datetime import datetime, timedelta
+from icalendar.prop import vDatetime
 
 log = logging.getLogger(__name__)
 
@@ -193,7 +194,12 @@ class CampusCalendarUploader(object):
 
         for i, ev in enumerate(events):
             log.info('Upload event {index}/{num}'.format(index=i+1, num=n))
-            self.upload_calendar.add_event(ev['uid'], ev['summary'], ev['dtstart'], ev['dtend'], ev['location'])
+            uid = ev['uid']
+            title = ev['summary']
+            start = vDatetime.from_ical(ev['dtstart'].to_ical(), 'Europe/Berlin')
+            end = vDatetime.from_ical(ev['dtend'].to_ical(), 'Europe/Berlin')
+            location = ev['location']
+            self.upload_calendar.add_event(uid, title, start, end, location)
         
         log.info('Uploaded all changes')
 
