@@ -4,14 +4,14 @@ import pyexchange
 import re
 
 
-class CalendarAdapter(object):
-    """Interface definition to allow interaction with different calendar providers."""
+class CalendarUploadAdapter(object):
+    """Interface definition to allow interaction with different calendar providers for uploading events."""
 
     def connect(self):
         """Establish connection to upload calendar."""
         raise NotImplementedError()
 
-    def retrieve_event(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time, end_time):
         """
         Retrieve uid of all events in time period.
         :param start_time: Start date of time period.
@@ -39,7 +39,7 @@ class CalendarAdapter(object):
         raise NotImplementedError()
 
 
-class CalDAVAdapter(CalendarAdapter):
+class CalDAVUploadAdapter(CalendarUploadAdapter):
     """Implements interaction with a CalDAV calendar provider."""
 
     def __init__(self, url, username, password):
@@ -73,7 +73,7 @@ class CalDAVAdapter(CalendarAdapter):
         # No calendar found (should normally not happen; principal should have raised error)
         raise caldav.error.NotFoundError('Could not find calendar with given url')
 
-    def retrieve_event(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time, end_time):
         """
         :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
         """
@@ -106,7 +106,7 @@ class CalDAVAdapter(CalendarAdapter):
         self.calendar.add_event(event_cal.to_ical())
 
 
-class ExchangeAdapter(CalendarAdapter):
+class ExchangeUploadAdapter(CalendarUploadAdapter):
     """Implements interaction with an Exchange calendar."""
 
     _tag_re = re.compile(r'(<!--.*?-->|<[^>]*>|\n|\r)')
@@ -146,18 +146,18 @@ class ExchangeAdapter(CalendarAdapter):
         else:
             self.calendar = service.calendar()
 
-    def retrieve_event(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time, end_time):
         """
         :raise
         """
         self.events = self.calendar.list_events(start=start_time, end=end_time, details=True).events
-        return list(map(lambda x: ExchangeAdapter._tag_re.sub('', x.body), self.events))
+        return list(map(lambda x: ExchangeUploadAdapter._tag_re.sub('', x.body), self.events))
 
     def delete_event(self, uid):
         """
         :raise
         """
-        events = filter(lambda x: ExchangeAdapter._tag_re.sub('', x.body) == uid, self.events)
+        events = filter(lambda x: ExchangeUploadAdapter._tag_re.sub('', x.body) == uid, self.events)
         for e in events:
             e.cancel()
 

@@ -6,10 +6,10 @@ import logging
 import requests
 from datetime import datetime
 
-from cacaluploader import CampusCalendarUploader, CampusOfficeAuthorizationError, CalDAVAdapter, ExchangeAdapter
+from cacaluploader import CampusCalendarUploader, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
+    ExchangeUploadAdapter
 
 log = logging.getLogger(__name__)
-
 
 if __name__ == '__main__':
     # The script will try to load everything from a config file with following structure:
@@ -58,7 +58,7 @@ if __name__ == '__main__':
             url = config.get('CalDAV', 'url')
             username = config.get('CalDAV', 'username')
             password = config.get('CalDAV', 'password')
-            adapter = CalDAVAdapter(url, username, password)
+            adapter = CalDAVUploadAdapter(url, username, password)
         elif target == 'exchange':
             ews_url = config.get('Exchange', 'ews_url')
             calendar_id = config.get('Exchange', 'calendar_id', fallback=None)
@@ -66,9 +66,9 @@ if __name__ == '__main__':
             password = config.get('Exchange', 'password')
 
             if calendar_id is None:
-                adapter = ExchangeAdapter(ews_url, username, password)
+                adapter = ExchangeUploadAdapter(ews_url, username, password)
             else:
-                adapter = ExchangeAdapter(ews_url, username, password, calendar_id)
+                adapter = ExchangeUploadAdapter(ews_url, username, password, calendar_id)
         else:
             raise RuntimeError('Unknown adapter!')
 

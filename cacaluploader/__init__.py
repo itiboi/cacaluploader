@@ -1,2 +1,2 @@
-from .adapter import CalDAVAdapter, ExchangeAdapter
-from .uploader import CampusCalendarUploader, CampusOfficeAuthorizationError
+from .upload_adapters import CalDAVUploadAdapter, ExchangeUploadAdapter
+from .synchronizer import CampusCalendarUploader, CampusOfficeAuthorizationError

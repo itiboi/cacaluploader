@@ -21,12 +21,6 @@ class CampusCalendarUploader(object):
     All already existing events in the CalDAV calendar in this period will be removed.
     """
 
-    # Campus office urls
-    _campus_base_url = 'https://www.campus.rwth-aachen.de/office/'
-    _campus_login_url = 'views/campus/redirect.asp'
-    _campus_cal_url = 'views/calendar/iCalExport.asp?startdt={start:%d.%m.%Y}&enddt={end:%d.%m.%Y} 23:59:59'
-    _campus_logout_url = 'system/login/logoff.asp'
-
     def __init__(self, mat_number, campus_pass, upload_calendar, start_time=None, end_time=None):
         """
         Initialize object with given values. The default time period if none given is 1 week in the past from today
@@ -159,7 +153,7 @@ class CampusCalendarUploader(object):
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
         events = list(events)
-        old_event_ids = self.upload_calendar.retrieve_event(self.start_time, self.end_time)
+        old_event_ids = self.upload_calendar.retrieve_event_ids(self.start_time, self.end_time)
         n = 0
         for (new, old_id) in itertools.product(events, old_event_ids):
             if new['uid'] == old_id:
