@@ -3,6 +3,8 @@
 
 import caldav
 import icalendar
+import pyexchange
+import re
 
 
 class CalendarAdapter(object):
@@ -107,3 +109,69 @@ class CalDAVAdapter(CalendarAdapter):
         self.calendar.add_event(event_cal.to_ical())
 
 
+class ExchangeAdapter(CalendarAdapter):
+    """Implements interaction with an Exchange calendar."""
+
+    _tag_re = re.compile(r'(<!--.*?-->|<[^>]*>|\n|\r)')
+
+    def __init__(self, ews_url, username, password, calendar_id=None):
+        """
+
+        :param ews_url:
+        :param username:
+        :param password:
+        :param calendar_id:
+        :return:
+        """
+        self.connection = pyexchange.ExchangeNTLMAuthConnection(url=ews_url, username=username, password=password)
+        self.calendar_name = calendar_id
+        self.calendar = None
+        self.events = None
+
+    def connect(self):
+        """
+        :raise
+        """
+        service = pyexchange.Exchange2010Service(self.connection)
+        if self.calendar_name is not None:
+            # Find calendar with given name
+            folders = service.folder().find_folder(parent_id='calendar')
+            calendar_id = None
+            for folder in folders:
+                if folder.display_name == self.calendar_name:
+                    calendar_id = folder.id
+
+            # Check if calendar was not found
+            if calendar_id is None:
+                raise caldav.error.NotFoundError('Could not find calendar with given url')
+
+            self.calendar = service.calendar(id=calendar_id)
+        else:
+            self.calendar = service.calendar()
+
+    def retrieve_event(self, start_time, end_time):
+        """
+        :raise
+        """
+        self.events = self.calendar.list_events(start=start_time, end=end_time, details=True).events
+        return list(map(lambda x: ExchangeAdapter._tag_re.sub('', x.body), self.events))
+
+    def delete_event(self, uid):
+        """
+        :raise
+        """
+        events = filter(lambda x: ExchangeAdapter._tag_re.sub('', x.body) == uid, self.events)
+        for e in events:
+            e.cancel()
+
+    def add_event(self, uid, title, start_time, end_time, location):
+        """
+        :raise
+        """
+        event = self.calendar.event()
+        event.subject = title
+        event.start = start_time
+        event.end = end_time
+        event.location = location
+        event.html_body = uid
+        event.create()

@@ -6,7 +6,7 @@ import icalendar
 import itertools
 import logging
 import requests
-from adapter import CalDAVAdapter
+from adapter import CalDAVAdapter, ExchangeAdapter
 from datetime import datetime, timedelta
 from icalendar.prop import vDatetime
 
@@ -252,6 +252,16 @@ if __name__ == '__main__':
             username = config.get('CalDAV', 'username')
             password = config.get('CalDAV', 'password')
             adapter = CalDAVAdapter(url, username, password)
+        elif target == 'exchange':
+            ews_url = config.get('Exchange', 'ews_url')
+            calendar_id = config.get('Exchange', 'calendar_id', fallback=None)
+            username = config.get('Exchange', 'username')
+            password = config.get('Exchange', 'password')
+
+            if calendar_id is None:
+                adapter = ExchangeAdapter(ews_url, username, password)
+            else:
+                adapter = ExchangeAdapter(ews_url, username, password, calendar_id)
         else:
             raise RuntimeError('Unknown adapter!')
 
