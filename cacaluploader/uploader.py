@@ -1,12 +1,7 @@
-#!/usr/bin/env python
-# coding=utf-8
-
-import caldav
 import icalendar
 import itertools
 import logging
 import requests
-from adapter import CalDAVAdapter, ExchangeAdapter
 from datetime import datetime, timedelta
 from icalendar.prop import vDatetime
 
@@ -202,94 +197,3 @@ class CampusCalendarUploader(object):
             self.upload_calendar.add_event(uid, title, start, end, location)
         
         log.info('Uploaded all changes')
-
-
-if __name__ == '__main__':
-    # The script will try to load everything from a config file with following structure:
-    # [CampusOffice]
-    # mat=<matriculation number>
-    # pass=<password>
-    #
-    # [Adapter]
-    # target=caldav
-    #
-    # [CalDAV]
-    # url=<calendar url>
-    # username=<calendar username>
-    # password=<password>
-    #
-    # and optional:
-    # [Period]
-    # start=<year-month-day>
-    # end=<year-month-day>
-
-    import sys
-    import configparser
-
-    # Set up logger
-    logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', level=logging.INFO,
-                        datefmt='%Y-%m-%d %H:%M:%S')
-    log = logging.getLogger('cacaluploader')
-
-    # Parse command line
-    if len(sys.argv) != 2:
-        log.error('Error: Incorrect use!')
-        log.info(' cacaluploader.py <config-file>')
-        exit()
-    config_file = sys.argv[1]
-
-    try:
-        # Parse config file
-        config = configparser.ConfigParser()
-        config.read(config_file)
-        mat_number = config.get('CampusOffice', 'mat')
-        campus_pass = config.get('CampusOffice', 'pass')
-
-        target = config.get('Adapter', 'target')
-
-        if target == 'caldav':
-            url = config.get('CalDAV', 'url')
-            username = config.get('CalDAV', 'username')
-            password = config.get('CalDAV', 'password')
-            adapter = CalDAVAdapter(url, username, password)
-        elif target == 'exchange':
-            ews_url = config.get('Exchange', 'ews_url')
-            calendar_id = config.get('Exchange', 'calendar_id', fallback=None)
-            username = config.get('Exchange', 'username')
-            password = config.get('Exchange', 'password')
-
-            if calendar_id is None:
-                adapter = ExchangeAdapter(ews_url, username, password)
-            else:
-                adapter = ExchangeAdapter(ews_url, username, password, calendar_id)
-        else:
-            raise RuntimeError('Unknown adapter!')
-
-        if config.has_section('Period'):
-            start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
-            end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
-        else:
-            start_time = None
-            end_time = None
-
-        # Start upload
-
-        uploader = CampusCalendarUploader(mat_number, campus_pass, adapter, start_time, end_time)
-        uploader.upload()
-    except configparser.NoOptionError as e:
-        log.error('Could not load config from file: %s', e)
-    except (requests.RequestException, CampusOfficeAuthorizationError) as e:
-        log.error('Could not retrieve CampusOffice calendar: %s', e)
-    except caldav.error.AuthorizationError as e:
-        log.error('Could not access CalDAV calendar: Authorization failed')
-    except caldav.error.NotFoundError as e:
-        log.error('Could not find CalDAV calendar')
-    except caldav.error.ReportError as e:
-        log.error('Could not retrieve list of already existing events in CalDAV calendar')
-    except caldav.error.DeleteError as e:
-        log.error('Could not remove already existing event in CalDAV calendar')
-    except caldav.error.PutError as e:
-        log.error('Could not upload new event to CalDAV calendar')
-    # Maybe catch many other things too :(
-    except ValueError as e:
-        log.error('Could not parse time period: %s', e)

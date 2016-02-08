@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# coding=utf-8
-
 import caldav
 import icalendar
 import pyexchange
