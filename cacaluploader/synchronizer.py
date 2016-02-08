@@ -1,18 +1,11 @@
-import icalendar
 import itertools
 import logging
-import requests
 from datetime import datetime, timedelta
-from icalendar.prop import vDatetime
+
+from .event import Event
+from .source_adapters import CampusCalenderAdapter
 
 log = logging.getLogger(__name__)
-
-
-class CampusOfficeAuthorizationError(Exception):
-    """The uploader is unable to login into CampusOffice with given matriculation number and password."""
-
-    def __str__(self):
-        return 'CampusOffice login failed: Maybe invalid username/password?'
 
 
 class CampusCalendarUploader(object):
@@ -93,75 +86,35 @@ class CampusCalendarUploader(object):
         :raise caldav.error.PutError: Raised if upload of an event failed.
         """
         # Retrieve current calendar
-        source_cal = self._retrieve_source_calendar()
-        # Remove all components which are no events
-        source_events = filter(lambda x: isinstance(x, icalendar.Event), source_cal.subcomponents)
+        campus_cal = CampusCalenderAdapter(self.matriculation_number, self.campus_password, self.start_time, self.end_time)
+        events = campus_cal.events
 
         # Connect upload calendar
-        log.info('Search for caldav calendar')
+        log.info('Search for upload calendar')
         self.upload_calendar.connect()
 
         # Upload all events to calendar
-        self._upload_events(source_events)
-
-    def _retrieve_source_calendar(self):
-        """
-        Retrieve all events entered in CampusOffice.
-        :return: :class:`icalendar.Calendar` calendar object with all events from CampusOffice.
-        :raise requests.RequestException: Raised if connection to CampusOffice failed.
-        :raise CampusOfficeAuthorizationError: Raised if CampusOffice login failed.
-        """
-        cls = CampusCalendarUploader
-        # Create session which cares about cookies
-        session = requests.Session()
-
-        # Fetch base page for session cookies
-        log.info('Fetch base page for session cookie')
-        req = session.get(cls._campus_base_url)
-        req.raise_for_status()
-
-        # Log in and validating session cookies
-        log.info('Validate session by logging in')
-        values = {'u': self.matriculation_number,
-                  'p': self.campus_password}
-        req = session.post(cls._campus_base_url + cls._campus_login_url, data=values)
-        req.raise_for_status()
-        if 'loginfailed' in req.history[0].headers['location']:
-            raise CampusOfficeAuthorizationError()
-        
-        # Retrieve calendar
-        log.info('Retrieve calendar')
-        req = session.get(cls._campus_base_url + cls._campus_cal_url.format(start=self.start_time, end=self.end_time))
-        req.raise_for_status()
-
-        # Log out
-        log.info('Invalidating session by logging out')
-        session.get(cls._campus_base_url + cls._campus_logout_url)
-
-        # Parse calendar with forced utf-8
-        log.info('Parse calendar')
-        req.encoding = 'utf-8'
-        return icalendar.Calendar.from_ical(req.text)
+        self._upload_events(events)
 
     def _upload_events(self, events):
         """
         Upload all given events to caldav calendar and remove all other events in time period.
+        :param list[Event] events: Events to upload.
         :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
         :raise caldav.error.DeleteError: Raised if removing of already existing event failed.
         :raise caldav.error.PutError: Raised if upload of an event failed.
         """
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
-        events = list(events)
         old_event_ids = self.upload_calendar.retrieve_event_ids(self.start_time, self.end_time)
         n = 0
         for (new, old_id) in itertools.product(events, old_event_ids):
-            if new['uid'] == old_id:
+            if new.uid == old_id:
                 events.remove(new)
                 old_event_ids.remove(old_id)
                 n += 1
         if n > 0:
-            log.info('{n} event(s) where already uploaded'.format(n=n))
+            log.info('{n} event(s) were already uploaded'.format(n=n))
 
         # Remove only deprecated events
         n = len(old_event_ids)
@@ -183,11 +136,6 @@ class CampusCalendarUploader(object):
 
         for i, ev in enumerate(events):
             log.info('Upload event {index}/{num}'.format(index=i+1, num=n))
-            uid = ev['uid']
-            title = ev['summary']
-            start = vDatetime.from_ical(ev['dtstart'].to_ical(), 'Europe/Berlin')
-            end = vDatetime.from_ical(ev['dtend'].to_ical(), 'Europe/Berlin')
-            location = ev['location']
-            self.upload_calendar.add_event(uid, title, start, end, location)
+            self.upload_calendar.add_event(ev.uid, ev.title, ev.start_time, ev.end_time, ev.location)
         
         log.info('Uploaded all changes')
