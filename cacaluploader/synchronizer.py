@@ -1,6 +1,5 @@
 import itertools
 import logging
-from datetime import datetime, timedelta
 
 from .source_adapters import CalendarSourceAdapter
 from .upload_adapters import CalendarUploadAdapter
@@ -14,63 +13,16 @@ class CampusCalendarUploader(object):
     All already existing events in the CalDAV calendar in this period will be removed.
     """
 
-    def __init__(self, source_adapter: CalendarSourceAdapter, upload_calendar: CalendarUploadAdapter,
-                 start_time=None, end_time=None):
+    def __init__(self, source_adapter: CalendarSourceAdapter, upload_calendar: CalendarUploadAdapter):
         """
         Initialize object with given values. The default time period if none given is 1 week in the past from today
         to 27 weeks in the future.
         :param source_adapter: Source providing events
         :param upload_calendar: Calendar adapter to upload events to.
-        :param start_time: Start date of time period. Default: 1 week in the past from today.
-        :param end_time: Start date of time period. Default: 27 weeks in the future from today.
-        :raise ValueError: Raised if only one time boundary is provided.
         """
-        # Set default values for time period
-        today = datetime.today()
-        self._start_time = today + timedelta(weeks=-1)
-        self._end_time = today + timedelta(weeks=27)
-
         # Save parameters
         self.source_adapter = source_adapter
         self.upload_calendar = upload_calendar
-
-        # If given save time period
-        if start_time is not None and end_time is not None:
-            self.start_time = start_time
-            self.end_time = end_time
-        # Prevent misuse with only one time period boundary
-        elif (start_time is None) != (end_time is None):
-            raise ValueError('Can not upload calendar with only one time period boundary')
-
-    @property
-    def start_time(self):
-        return self._start_time
-
-    @start_time.setter
-    def start_time(self, start):
-        # Check for non-existing end
-        if self.end_time is None:
-            self._end_time = start
-        # Check for valid time period
-        elif self.end_time < start:
-            raise ValueError('Start of time period is after end')
-
-        self._start_time = start
-
-    @property
-    def end_time(self):
-        return self._end_time
-
-    @end_time.setter
-    def end_time(self, end):
-        # Check for non-existing start
-        if self.start_time is None:
-            self._start_time = end
-        # Check for valid time period
-        elif self.start_time > end:
-            raise ValueError('End of time period is before start')
-
-        self._end_time = end
 
     def upload(self):
         """
@@ -93,7 +45,12 @@ class CampusCalendarUploader(object):
 
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
-        old_event_ids = self.upload_calendar.retrieve_event_ids(self.start_time, self.end_time)
+        old_event_ids = []
+        start_date = self.source_adapter.start_time
+        end_date = self.source_adapter.end_time
+        if start_date is not None and end_date is not None:
+            old_event_ids = self.upload_calendar.retrieve_event_ids(start_date, end_date)
+
         n = 0
         for (new, old_id) in itertools.product(events, old_event_ids):
             if new.uid == old_id:

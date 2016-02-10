@@ -49,10 +49,20 @@ if __name__ == '__main__':
         # Parse config file
         config = configparser.ConfigParser()
         config.read(config_file)
+
+        # Parse source
         mat_number = config.get('CampusOffice', 'mat')
         campus_pass = config.get('CampusOffice', 'pass')
+
+        start_time = None
+        end_time = None
+        if config.has_section('Period'):
+            start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
+            end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
+
         source_adapter = CampusCalenderAdapter(mat_number, campus_pass)
 
+        # Parse upload calendar
         target = config.get('Adapter', 'target')
 
         if target == 'caldav':
@@ -73,16 +83,8 @@ if __name__ == '__main__':
         else:
             raise RuntimeError('Unknown adapter!')
 
-        if config.has_section('Period'):
-            start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
-            end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
-        else:
-            start_time = None
-            end_time = None
-
         # Start upload
-
-        uploader = CampusCalendarUploader(source_adapter, upload_adapter, start_time, end_time)
+        uploader = CampusCalendarUploader(source_adapter, upload_adapter)
         uploader.upload()
     except configparser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)

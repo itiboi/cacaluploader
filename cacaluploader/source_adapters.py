@@ -21,8 +21,22 @@ class CalendarSourceAdapter(object):
     @property
     def events(self):
         """
-        :return: All events provided by the calender.
+        :return: All events provided by the calender. Can be empty.
         :rtype: list[Event]
+        """
+        raise NotImplementedError()
+
+    @property
+    def start_time(self) -> datetime:
+        """
+        :return: Starting time of the first event provided. None if no event available.
+        """
+        raise NotImplementedError()
+
+    @property
+    def end_time(self) -> datetime:
+        """
+        :return: Ending time of the last event provided. None if no event available.
         """
         raise NotImplementedError()
 
@@ -121,6 +135,24 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
 
         return self._events
 
+    @property
+    def start_time(self) -> datetime:
+        first = None
+        for e in self.events:
+            if first is None or e.start_time < first:
+                first = e.start_time
+
+        return first
+
+    @property
+    def end_time(self) -> datetime:
+        last = None
+        for e in self.events:
+            if last is None or last > e.end_time:
+                last = e.end_time
+
+        return last
+
 
 # TODO
 class ICalCalendarAdapter(CalendarSourceAdapter):
@@ -133,3 +165,10 @@ class ICalCalendarAdapter(CalendarSourceAdapter):
     def events(self):
         raise NotImplementedError()
 
+    @property
+    def start_time(self) -> datetime:
+        raise NotImplementedError()
+
+    @property
+    def end_time(self) -> datetime:
+        raise NotImplementedError()
