@@ -1,6 +1,7 @@
 import caldav
 import icalendar
 import pyexchange
+import pytz
 import re
 
 
@@ -96,9 +97,13 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         event = icalendar.Event()
         event.add('uid', uid)
         event.add('summary', title)
-        event.add('dtstart', start_time)
-        event.add('dtend', end_time)
         event.add('location', location)
+
+        # Convert to UTC to avoid DST hassles
+        utc = pytz.timezone('UTC')
+        event.add('dtstart', start_time.astimezone(utc))
+        event.add('dtend', end_time.astimezone(utc))
+
         event_cal = icalendar.Calendar()
         event_cal.add_component(event)
 

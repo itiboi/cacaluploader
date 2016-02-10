@@ -32,9 +32,14 @@ class Event(object):
         """
         uid = event['uid']
         title = event['summary']
-        start = icalendar.prop.vDatetime.from_ical(event['dtstart'].to_ical(), 'Europe/Berlin')
-        end = icalendar.prop.vDatetime.from_ical(event['dtend'].to_ical(), 'Europe/Berlin')
         location = event['location']
+
+        # Doing time conversion to keep timezone
+        start_obj = event['dtstart']
+        start = icalendar.prop.vDatetime.from_ical(start_obj.to_ical(), start_obj.params['tzid'])
+        end_obj = event['dtend']
+        end = icalendar.prop.vDatetime.from_ical(end_obj.to_ical(), end_obj.params['tzid'])
+
         return Event(uid, cal_uid, title, start, end, location)
 
     @property
