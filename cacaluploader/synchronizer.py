@@ -2,8 +2,8 @@ import itertools
 import logging
 from datetime import datetime, timedelta
 
-from .event import Event
-from .source_adapters import CampusCalenderAdapter
+from .source_adapters import CalendarSourceAdapter
+from .upload_adapters import CalendarUploadAdapter
 
 log = logging.getLogger(__name__)
 
@@ -14,12 +14,12 @@ class CampusCalendarUploader(object):
     All already existing events in the CalDAV calendar in this period will be removed.
     """
 
-    def __init__(self, mat_number, campus_pass, upload_calendar, start_time=None, end_time=None):
+    def __init__(self, source_adapter: CalendarSourceAdapter, upload_calendar: CalendarUploadAdapter,
+                 start_time=None, end_time=None):
         """
         Initialize object with given values. The default time period if none given is 1 week in the past from today
         to 27 weeks in the future.
-        :param mat_number: Matriculation number used for the CampusOffice.
-        :param campus_pass: Password for CampusOffice.
+        :param source_adapter: Source providing events
         :param upload_calendar: Calendar adapter to upload events to.
         :param start_time: Start date of time period. Default: 1 week in the past from today.
         :param end_time: Start date of time period. Default: 27 weeks in the future from today.
@@ -31,8 +31,7 @@ class CampusCalendarUploader(object):
         self._end_time = today + timedelta(weeks=27)
 
         # Save parameters
-        self.matriculation_number = mat_number
-        self.campus_password = campus_pass
+        self.source_adapter = source_adapter
         self.upload_calendar = upload_calendar
 
         # If given save time period
@@ -86,24 +85,12 @@ class CampusCalendarUploader(object):
         :raise caldav.error.PutError: Raised if upload of an event failed.
         """
         # Retrieve current calendar
-        campus_cal = CampusCalenderAdapter(self.matriculation_number, self.campus_password, self.start_time, self.end_time)
-        events = campus_cal.events
+        events = self.source_adapter.events
 
         # Connect upload calendar
         log.info('Search for upload calendar')
         self.upload_calendar.connect()
 
-        # Upload all events to calendar
-        self._upload_events(events)
-
-    def _upload_events(self, events):
-        """
-        Upload all given events to caldav calendar and remove all other events in time period.
-        :param list[Event] events: Events to upload.
-        :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
-        :raise caldav.error.DeleteError: Raised if removing of already existing event failed.
-        :raise caldav.error.PutError: Raised if upload of an event failed.
-        """
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
         old_event_ids = self.upload_calendar.retrieve_event_ids(self.start_time, self.end_time)

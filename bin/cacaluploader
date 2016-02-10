@@ -7,7 +7,7 @@ import requests
 from datetime import datetime
 
 from cacaluploader import CampusCalendarUploader, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
-    ExchangeUploadAdapter
+    ExchangeUploadAdapter, CampusCalenderAdapter
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ if __name__ == '__main__':
         config.read(config_file)
         mat_number = config.get('CampusOffice', 'mat')
         campus_pass = config.get('CampusOffice', 'pass')
+        source_adapter = CampusCalenderAdapter(mat_number, campus_pass)
 
         target = config.get('Adapter', 'target')
 
@@ -58,7 +59,7 @@ if __name__ == '__main__':
             url = config.get('CalDAV', 'url')
             username = config.get('CalDAV', 'username')
             password = config.get('CalDAV', 'password')
-            adapter = CalDAVUploadAdapter(url, username, password)
+            upload_adapter = CalDAVUploadAdapter(url, username, password)
         elif target == 'exchange':
             ews_url = config.get('Exchange', 'ews_url')
             calendar_id = config.get('Exchange', 'calendar_id', fallback=None)
@@ -66,9 +67,9 @@ if __name__ == '__main__':
             password = config.get('Exchange', 'password')
 
             if calendar_id is None:
-                adapter = ExchangeUploadAdapter(ews_url, username, password)
+                upload_adapter = ExchangeUploadAdapter(ews_url, username, password)
             else:
-                adapter = ExchangeUploadAdapter(ews_url, username, password, calendar_id)
+                upload_adapter = ExchangeUploadAdapter(ews_url, username, password, calendar_id)
         else:
             raise RuntimeError('Unknown adapter!')
 
@@ -81,7 +82,7 @@ if __name__ == '__main__':
 
         # Start upload
 
-        uploader = CampusCalendarUploader(mat_number, campus_pass, adapter, start_time, end_time)
+        uploader = CampusCalendarUploader(source_adapter, upload_adapter, start_time, end_time)
         uploader.upload()
     except configparser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)

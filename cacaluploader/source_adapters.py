@@ -8,8 +8,7 @@ from .event import Event
 log = getLogger(__name__)
 
 
-# TODO
-class CalendarDownloadAdapter(object):
+class CalendarSourceAdapter(object):
     """Interface definition to allow interaction with different calendar providers for fetching events."""
 
     def retrieve_events(self):
@@ -35,7 +34,7 @@ class CampusOfficeAuthorizationError(Exception):
         return 'CampusOffice login failed: Maybe invalid username/password?'
 
 
-class CampusCalenderAdapter(CalendarDownloadAdapter):
+class CampusCalenderAdapter(CalendarSourceAdapter):
     """Adapter to fetch all events of the CampusOffice calendar of a given time period."""
 
     # Campus office urls
@@ -64,8 +63,8 @@ class CampusCalenderAdapter(CalendarDownloadAdapter):
 
         # If given save time period
         if start_time is not None and end_time is not None:
-            self.start_time = start_time
-            self.end_time = end_time
+            self._start_time = start_time
+            self._end_time = end_time
         # Prevent misuse with only one time period boundary
         elif (start_time is None) != (end_time is None):
             raise ValueError('Can not retrieve calendar with only one time period boundary')
@@ -98,7 +97,7 @@ class CampusCalenderAdapter(CalendarDownloadAdapter):
 
         # Retrieve calendar
         log.info('Retrieve calendar')
-        req = session.get(cls._campus_base_url + cls._campus_cal_url.format(start=self.start_time, end=self.end_time))
+        req = session.get(cls._campus_base_url + cls._campus_cal_url.format(start=self._start_time, end=self._end_time))
         req.raise_for_status()
 
         # Log out
@@ -123,7 +122,8 @@ class CampusCalenderAdapter(CalendarDownloadAdapter):
         return self._events
 
 
-class ICalCalendarAdapter(CalendarDownloadAdapter):
+# TODO
+class ICalCalendarAdapter(CalendarSourceAdapter):
     """Adapter to fetch events from a simple iCal calendar url."""
 
     def retrieve_events(self):
