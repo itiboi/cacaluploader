@@ -6,7 +6,7 @@ import logging
 import requests
 from datetime import datetime
 
-from cacaluploader import CampusCalendarUploader, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
+from cacaluploader import CalendarSynchronizer, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
     ExchangeUploadAdapter, CampusCalenderAdapter, ICalendarAdapter
 
 log = logging.getLogger(__name__)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
             raise RuntimeError('Unknown adapter!')
 
         # Start upload
-        uploader = CampusCalendarUploader(source_adapter, upload_adapter)
+        uploader = CalendarSynchronizer(source_adapter, upload_adapter)
         uploader.upload()
     except configparser.NoOptionError as e:
         log.error('Could not load config from file: %s', e)

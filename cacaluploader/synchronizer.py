@@ -7,16 +7,15 @@ from .upload_adapters import CalendarUploadAdapter
 log = logging.getLogger(__name__)
 
 
-class CampusCalendarUploader(object):
+class CalendarSynchronizer(object):
     """
-    Fetch all events of the CampusOffice calendar of a given time period and upload them to a CalDAV calendar.
-    All already existing events in the CalDAV calendar in this period will be removed.
+    Fetch all events of a source calendar and upload them to a target calendar.
+    All already existing events of the source calendar in this period will be removed.
     """
 
     def __init__(self, source_adapter: CalendarSourceAdapter, upload_calendar: CalendarUploadAdapter):
         """
-        Initialize object with given values. The default time period if none given is 1 week in the past from today
-        to 27 weeks in the future.
+        Initialize object with given values.
         :param source_adapter: Source providing events
         :param upload_calendar: Calendar adapter to upload events to.
         """
@@ -26,8 +25,8 @@ class CampusCalendarUploader(object):
 
     def upload(self):
         """
-        Perform the job of the class. Fetch the CampusOffice calendar and upload all events to the give CALDav calendar.
-        :raise requests.RequestException: Raised if connection to CampusOffice failed.
+        Perform the job of the class. Fetch the source calendar and upload all events to the given upload calendar.
+        :raise requests.RequestException: Raised if connection to calendar failed.
         :raise CampusOfficeAuthorizationError: Raised if CampusOffice login failed.
         :raise caldav.error.AuthorizationError: Raised if caldav username or password are incorrect.
         :raise caldav.error.NotFoundError: Raised if caldav calendar could not be found.
@@ -40,7 +39,7 @@ class CampusCalendarUploader(object):
         events = self.source_adapter.events
 
         # Connect upload calendar
-        log.info('Search for upload calendar')
+        log.info('Connect to upload calendar')
         self.upload_calendar.connect()
 
         # Filter events which where already uploaded
