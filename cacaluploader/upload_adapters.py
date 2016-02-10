@@ -4,6 +4,10 @@ import pyexchange
 import pytz
 import re
 
+from datetime import datetime
+
+from .event import Event
+
 
 class CalendarUploadAdapter(object):
     """Interface definition to allow interaction with different calendar providers for uploading events."""
@@ -12,7 +16,7 @@ class CalendarUploadAdapter(object):
         """Establish connection to upload calendar."""
         raise NotImplementedError()
 
-    def retrieve_event_ids(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
         """
         Retrieve uid of all events in time period.
         :param start_time: Start date of time period.
@@ -28,14 +32,10 @@ class CalendarUploadAdapter(object):
         """
         raise NotImplementedError()
 
-    def add_event(self, uid, title, start_time, end_time, location):
+    def add_event(self, event: Event):
         """
         Create a new event with given values in calendar.
-        :param uid: Id of event for identification.
-        :param title: Main title of event.
-        :param start_time: Event starting time.
-        :param end_time: Event end time.
-        :param location: Event room/location.
+        :param event: Event to add
         """
         raise NotImplementedError()
 
@@ -74,7 +74,7 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         # No calendar found (should normally not happen; principal should have raised error)
         raise caldav.error.NotFoundError('Could not find calendar with given url')
 
-    def retrieve_event_ids(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
         """
         :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
         """
@@ -89,23 +89,23 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         for e in event:
             e.delete()
 
-    def add_event(self, uid, title, start_time, end_time, location):
+    def add_event(self, event: Event):
         """
         :raise caldav.error.PutError: Raised if upload of an event failed.
         """
         # Create iCal representation of event
-        event = icalendar.Event()
-        event.add('uid', uid)
-        event.add('summary', title)
-        event.add('location', location)
+        new_event = icalendar.Event()
+        new_event.add('uid', event.uid)
+        new_event.add('summary', event.title)
+        new_event.add('location', event.location)
 
         # Convert to UTC to avoid DST hassles
         utc = pytz.timezone('UTC')
-        event.add('dtstart', start_time.astimezone(utc))
-        event.add('dtend', end_time.astimezone(utc))
+        new_event.add('dtstart', event.start_time.astimezone(utc))
+        new_event.add('dtend', event.end_time.astimezone(utc))
 
         event_cal = icalendar.Calendar()
-        event_cal.add_component(event)
+        event_cal.add_component(new_event)
 
         # Add it
         self.calendar.add_event(event_cal.to_ical())
@@ -151,7 +151,7 @@ class ExchangeUploadAdapter(CalendarUploadAdapter):
         else:
             self.calendar = service.calendar()
 
-    def retrieve_event_ids(self, start_time, end_time):
+    def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
         """
         :raise
         """
@@ -166,14 +166,14 @@ class ExchangeUploadAdapter(CalendarUploadAdapter):
         for e in events:
             e.cancel()
 
-    def add_event(self, uid, title, start_time, end_time, location):
+    def add_event(self, event: Event):
         """
         :raise
         """
-        event = self.calendar.event()
-        event.subject = title
-        event.start = start_time
-        event.end = end_time
-        event.location = location
-        event.html_body = uid
-        event.create()
+        new_event = self.calendar.event()
+        new_event.subject = event.title
+        new_event.start = event.start_time
+        new_event.end = event.end_time
+        new_event.location = event.location
+        new_event.html_body = event.uid
+        new_event.create()

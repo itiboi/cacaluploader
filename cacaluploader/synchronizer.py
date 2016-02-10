@@ -80,6 +80,6 @@ class CampusCalendarUploader(object):
 
         for i, ev in enumerate(events):
             log.info('Upload event {index}/{num}'.format(index=i+1, num=n))
-            self.upload_calendar.add_event(ev.uid, ev.title, ev.start_time, ev.end_time, ev.location)
+            self.upload_calendar.add_event(ev)
         
         log.info('Uploaded all changes')

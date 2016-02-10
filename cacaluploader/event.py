@@ -30,9 +30,9 @@ class Event(object):
         :param event: Event object to parse.
         :rtype: Event
         """
-        uid = event['uid']
-        title = event['summary']
-        location = event['location']
+        uid = str(event['uid'])
+        title = str(event['summary'])
+        location = str(event['location'])
 
         # Doing time conversion to keep timezone
         start = event['dtstart'].dt
