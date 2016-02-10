@@ -1,3 +1,3 @@
-from .source_adapters import CampusCalenderAdapter, CampusOfficeAuthorizationError
+from .source_adapters import CampusCalenderAdapter, CampusOfficeAuthorizationError, ICalendarAdapter
 from .upload_adapters import CalDAVUploadAdapter, ExchangeUploadAdapter
 from .synchronizer import CampusCalendarUploader

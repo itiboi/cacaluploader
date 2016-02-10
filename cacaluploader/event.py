@@ -35,10 +35,8 @@ class Event(object):
         location = event['location']
 
         # Doing time conversion to keep timezone
-        start_obj = event['dtstart']
-        start = icalendar.prop.vDatetime.from_ical(start_obj.to_ical(), start_obj.params['tzid'])
-        end_obj = event['dtend']
-        end = icalendar.prop.vDatetime.from_ical(end_obj.to_ical(), end_obj.params['tzid'])
+        start = event['dtstart'].dt
+        end = event['dtend'].dt
 
         return Event(uid, cal_uid, title, start, end, location)
 

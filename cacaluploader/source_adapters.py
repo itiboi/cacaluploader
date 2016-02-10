@@ -11,6 +11,10 @@ log = getLogger(__name__)
 class CalendarSourceAdapter(object):
     """Interface definition to allow interaction with different calendar providers for fetching events."""
 
+    def __init__(self):
+        # Initialize event list
+        self._events = None
+
     def retrieve_events(self):
         """
         Establish connection to calendar and fetches the events. Will be automatically called when accessing events
@@ -24,21 +28,35 @@ class CalendarSourceAdapter(object):
         :return: All events provided by the calender. Can be empty.
         :rtype: list[Event]
         """
-        raise NotImplementedError()
+        # Fetch events if not done up to now.
+        if self._events is None:
+            self.retrieve_events()
+
+        return self._events
 
     @property
     def start_time(self) -> datetime:
         """
         :return: Starting time of the first event provided. None if no event available.
         """
-        raise NotImplementedError()
+        first = None
+        for e in self.events:
+            if first is None or e.start_time < first:
+                first = e.start_time
+
+        return first
 
     @property
     def end_time(self) -> datetime:
         """
         :return: Ending time of the last event provided. None if no event available.
         """
-        raise NotImplementedError()
+        last = None
+        for e in self.events:
+            if last is None or last > e.end_time:
+                last = e.end_time
+
+        return last
 
 
 class CampusOfficeAuthorizationError(Exception):
@@ -66,6 +84,8 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
         :param datetime.datetime start_time: Start date of time period. Default: 1 week in the past from today.
         :param datetime.datetime end_time: Start date of time period. Default: 27 weeks in the future from today.
         """
+        super().__init__()
+
         # Set default values for time period
         today = datetime.today()
         self._start_time = today + timedelta(weeks=-1)
@@ -82,9 +102,6 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
         # Prevent misuse with only one time period boundary
         elif (start_time is None) != (end_time is None):
             raise ValueError('Can not retrieve calendar with only one time period boundary')
-
-        # Initialize event list
-        self._events = None
 
     def retrieve_events(self):
         """
@@ -128,47 +145,40 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
         self._events = list(map(lambda e: Event.from_ical_event("", e), events))
 
     @property
-    def events(self):
-        # Fetch events if not done up to now.
-        if self._events is None:
-            self.retrieve_events()
-
-        return self._events
-
-    @property
     def start_time(self) -> datetime:
-        first = None
-        for e in self.events:
-            if first is None or e.start_time < first:
-                first = e.start_time
-
-        return first
+        return self._start_time
 
     @property
     def end_time(self) -> datetime:
-        last = None
-        for e in self.events:
-            if last is None or last > e.end_time:
-                last = e.end_time
-
-        return last
+        return self._end_time
 
 
-# TODO
-class ICalCalendarAdapter(CalendarSourceAdapter):
+class ICalendarAdapter(CalendarSourceAdapter):
     """Adapter to fetch events from a simple iCal calendar url."""
 
+    def __init__(self, url: str):
+        """
+        Initialize object with given values.
+        :param url: Url to calendar in iCalendar format.
+        """
+        super().__init__()
+
+        self._url = url
+
     def retrieve_events(self):
-        raise NotImplementedError()
+        """
+        :raise requests.RequestException: Raised if connection to calendar failed.
+        """
+        # Retrieve calendar
+        log.info('Retrieve calendar')
+        req = requests.get(self._url)
+        req.raise_for_status()
 
-    @property
-    def events(self):
-        raise NotImplementedError()
+        # Parse calendar with forced utf-8
+        log.info('Parse calendar')
+        req.encoding = 'utf-8'
+        calendar = icalendar.Calendar.from_ical(req.text)
 
-    @property
-    def start_time(self) -> datetime:
-        raise NotImplementedError()
-
-    @property
-    def end_time(self) -> datetime:
-        raise NotImplementedError()
+        # Remove all components which are no events
+        events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
+        self._events = list(map(lambda e: Event.from_ical_event("", e), events))

@@ -7,7 +7,7 @@ import requests
 from datetime import datetime
 
 from cacaluploader import CampusCalendarUploader, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
-    ExchangeUploadAdapter, CampusCalenderAdapter
+    ExchangeUploadAdapter, CampusCalenderAdapter, ICalendarAdapter
 
 log = logging.getLogger(__name__)
 
@@ -51,16 +51,22 @@ if __name__ == '__main__':
         config.read(config_file)
 
         # Parse source
-        mat_number = config.get('CampusOffice', 'mat')
-        campus_pass = config.get('CampusOffice', 'pass')
+        if config.has_section('CampusOffice'):
+            mat_number = config.get('CampusOffice', 'mat')
+            campus_pass = config.get('CampusOffice', 'pass')
 
-        start_time = None
-        end_time = None
-        if config.has_section('Period'):
-            start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
-            end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
+            start_time = None
+            end_time = None
+            if config.has_section('Period'):
+                start_time = datetime.strptime(config.get('Period', 'start'), '%Y-%m-%d')
+                end_time = datetime.strptime(config.get('Period', 'end'), '%Y-%m-%d')
 
-        source_adapter = CampusCalenderAdapter(mat_number, campus_pass)
+            source_adapter = CampusCalenderAdapter(mat_number, campus_pass)
+        elif config.has_section('iCalendar'):
+            url = config.get('iCalendar', 'url')
+            source_adapter = ICalendarAdapter(url)
+        else:
+            raise ValueError('No source calendar specified!')
 
         # Parse upload calendar
         target = config.get('Adapter', 'target')
