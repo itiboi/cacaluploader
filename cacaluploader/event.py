@@ -23,7 +23,7 @@ class Event(object):
         self._location = location
 
     @classmethod
-    def from_ical_event(cls, cal_uid: str, event: icalendar.Event):
+    def from_ical_event(cls, event: icalendar.Event, cal_uid: str=None):
         """
         Construct object from an iCalendar event.
         :param cal_uid: Unique id of calendar the event belongs to.

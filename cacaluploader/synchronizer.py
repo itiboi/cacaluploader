@@ -44,31 +44,32 @@ class CalendarSynchronizer(object):
 
         # Filter events which where already uploaded
         log.info('Fetch all existing events')
-        old_event_ids = []
+        old_events = []
         start_date = self.source_adapter.start_time
         end_date = self.source_adapter.end_time
         if start_date is not None and end_date is not None:
-            old_event_ids = self.upload_calendar.retrieve_event_ids(start_date, end_date)
+            old_events = self.upload_calendar.retrieve_event_ids(start_date, end_date)
 
         n = 0
-        for (new, old_id) in itertools.product(events, old_event_ids):
-            if new.uid == old_id:
+        old_events = list(filter(lambda ids: ids[0] == self.source_adapter.uid, old_events))
+        for (new, (cal_id, old_id)) in itertools.product(events, old_events):
+            if new.calender_uid == cal_id and new.uid == old_id:
                 events.remove(new)
-                old_event_ids.remove(old_id)
+                old_events.remove((cal_id, old_id))
                 n += 1
         if n > 0:
             log.info('{n} event(s) were already uploaded'.format(n=n))
 
         # Remove only deprecated events
-        n = len(old_event_ids)
+        n = len(old_events)
         if n > 0:
             log.info('Delete {n} deprecated event(s) in given time period'.format(n=n))
         else:
             log.info('No deprecated event(s) found in calendar')
 
-        for i, uid in enumerate(old_event_ids):
+        for i, (cal_id, ev_id) in enumerate(old_events):
             log.info('Delete event {index}/{num}'.format(index=i+1, num=n))
-            self.upload_calendar.delete_event(uid)
+            self.upload_calendar.delete_event(cal_id, ev_id)
 
         # Upload all events
         n = len(events)

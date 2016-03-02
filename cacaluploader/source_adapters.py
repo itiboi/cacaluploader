@@ -1,3 +1,4 @@
+import hashlib
 import icalendar
 import requests
 from datetime import datetime, timedelta
@@ -11,8 +12,12 @@ log = getLogger(__name__)
 class CalendarSourceAdapter(object):
     """Interface definition to allow interaction with different calendar providers for fetching events."""
 
-    def __init__(self):
+    def __init__(self, uid: str):
+        """
+        :param uid: Unique calendar id.
+        """
         # Initialize event list
+        self._uid = uid
         self._events = None
 
     def retrieve_events(self):
@@ -21,6 +26,13 @@ class CalendarSourceAdapter(object):
         without a previous call.
         """
         raise NotImplementedError()
+
+    @property
+    def uid(self) -> str:
+        """
+        :return: Unique calendar id.
+        """
+        return self._uid
 
     @property
     def events(self):
@@ -53,7 +65,7 @@ class CalendarSourceAdapter(object):
         """
         last = None
         for e in self.events:
-            if last is None or last > e.end_time:
+            if last is None or last < e.end_time:
                 last = e.end_time
 
         return last
@@ -75,7 +87,8 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
     _campus_cal_url = 'views/calendar/iCalExport.asp?startdt={start:%d.%m.%Y}&enddt={end:%d.%m.%Y} 23:59:59'
     _campus_logout_url = 'system/login/logoff.asp'
 
-    def __init__(self, mat_number, campus_pass, start_time=None, end_time=None):
+    def __init__(self, mat_number: str, campus_pass: str, start_time: datetime=None, end_time: datetime=None,
+                 uid: str=None):
         """
         Initialize object with given values. The default time period if none given is 1 week in the past from today
         to 27 weeks in the future.
@@ -83,8 +96,11 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
         :param str campus_pass: Password for CampusOffice.
         :param datetime.datetime start_time: Start date of time period. Default: 1 week in the past from today.
         :param datetime.datetime end_time: Start date of time period. Default: 27 weeks in the future from today.
+        :param uid: Unique calendar id. Will use hash of matriculation number if omitted.
         """
-        super().__init__()
+        if uid is None:
+            uid = hashlib.sha1(mat_number.encode('utf')).digest()
+        super().__init__(uid=uid)
 
         # Set default values for time period
         today = datetime.today()
@@ -142,7 +158,7 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
 
         # Remove all components which are no events
         events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
-        self._events = list(map(lambda e: Event.from_ical_event("", e), events))
+        self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))
 
     @property
     def start_time(self) -> datetime:
@@ -156,12 +172,15 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
 class ICalendarAdapter(CalendarSourceAdapter):
     """Adapter to fetch events from a simple iCal calendar url."""
 
-    def __init__(self, url: str):
+    def __init__(self, url: str, uid: str=None):
         """
         Initialize object with given values.
         :param url: Url to calendar in iCalendar format.
+        :param uid: Unique calendar id. Will use a hash of the url if omitted.
         """
-        super().__init__()
+        if uid is None:
+            uid = hashlib.sha1(url.encode('utf')).digest()
+        super().__init__(uid=uid)
 
         self._url = url
 
@@ -181,4 +200,4 @@ class ICalendarAdapter(CalendarSourceAdapter):
 
         # Remove all components which are no events
         events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
-        self._events = list(map(lambda e: Event.from_ical_event("", e), events))
+        self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))

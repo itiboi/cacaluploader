@@ -64,6 +64,7 @@ if __name__ == '__main__':
         sources = list()
         for source in config.findall('/source'):
             source_type = source.get('type', None)
+            uid = source.get('id', None)
 
             if source_type == 'campusoffice':
                 mat_number = source.findtext('matno')
@@ -76,10 +77,10 @@ if __name__ == '__main__':
                     start_time = datetime.strptime(period.get('start'), '%Y-%m-%d')
                     end_time = datetime.strptime(period.get('end'), '%Y-%m-%d')
 
-                sources.append(CampusCalenderAdapter(mat_number, campus_pass))
+                sources.append(CampusCalenderAdapter(mat_number, campus_pass, uid=uid))
             elif source_type == 'icalendar':
                 url = source.findtext('url')
-                sources.append(ICalendarAdapter(url))
+                sources.append(ICalendarAdapter(url, uid))
             else:
                 raise ValueError('Unknown source calendar specified: %s!' % source_type)
 

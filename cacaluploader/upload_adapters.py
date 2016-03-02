@@ -12,23 +12,28 @@ from .event import Event
 class CalendarUploadAdapter(object):
     """Interface definition to allow interaction with different calendar providers for uploading events."""
 
+    _separator = '-|-'
+
     def connect(self):
         """Establish connection to upload calendar."""
         raise NotImplementedError()
 
     def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
         """
-        Retrieve uid of all events in time period.
+        Retrieve calendar uids and uids of all events in time period.
         :param start_time: Start date of time period.
         :param end_time: Start date of time period.
-        :return: List with ids of all events in time period.
+        :return: List of all events in time period in format (calendar uid, event uid). Calendar uid will be None
+                 if unknown.
+        :rtype: list[(str, str)]
         """
         raise NotImplementedError()
 
-    def delete_event(self, uid):
+    def delete_event(self, cal_uid: str, ev_uid: str):
         """
-        Remove event with given uid from calendar.
-        :param uid: Id of event to delete.
+        Remove given event from calendar.
+        :param cal_uid: Calender id of event to delete. Can be None.
+        :param ev_uid: Event id of calendar to remove.
         """
         raise NotImplementedError()
 
@@ -79,12 +84,25 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
         """
         self.events = self.calendar.date_search(start_time, end_time)
-        return list(map(lambda x: x.instance.vevent.uid.value, self.events))
 
-    def delete_event(self, uid):
+        def extractor(event):
+            raw_id = event.instance.vevent.uid.value
+            splitted_id = raw_id.split(CalendarUploadAdapter._separator)
+            if len(splitted_id) == 1:
+                splitted_id.insert(0, None)
+            return tuple(splitted_id)
+
+        return list(map(extractor, self.events))
+
+    def delete_event(self, cal_uid: str, ev_uid: str):
         """
         :raise caldav.error.DeleteError: Raised if removing of already existing event failed.
         """
+        # Compute real event id
+        uid = ev_uid
+        if cal_uid is not None:
+            uid = cal_uid + CalendarUploadAdapter._separator + uid
+
         event = filter(lambda x: x.instance.vevent.uid.value == uid, self.events)
         for e in event:
             e.delete()
@@ -95,7 +113,7 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         """
         # Create iCal representation of event
         new_event = icalendar.Event()
-        new_event.add('uid', event.uid)
+        new_event.add('uid', event.calender_uid + CalendarUploadAdapter._separator + event.uid)
         new_event.add('summary', event.title)
         new_event.add('location', event.location)
 
@@ -111,6 +129,7 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         self.calendar.add_event(event_cal.to_ical())
 
 
+# TODO: Complete documentation
 class ExchangeUploadAdapter(CalendarUploadAdapter):
     """Implements interaction with an Exchange calendar."""
 
@@ -158,7 +177,7 @@ class ExchangeUploadAdapter(CalendarUploadAdapter):
         self.events = self.calendar.list_events(start=start_time, end=end_time, details=True).events
         return list(map(lambda x: ExchangeUploadAdapter._tag_re.sub('', x.body), self.events))
 
-    def delete_event(self, uid):
+    def delete_event(self, cal_uid: str, ev_uid: str):
         """
         :raise
         """
