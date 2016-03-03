@@ -4,10 +4,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='cacaluploader',
+    name='calendarsync',
     version='0.1.0',
     packages=find_packages(),
-    scripts=['bin/cacaluploader'],
+    scripts=['bin/calendarsync'],
     author='Tim Bolender',
     author_email='contact@timbolender.de',
     url='https://github.com/itiboi/cacaluploader',

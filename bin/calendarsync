@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 from xml.etree import ElementTree
 
-from cacaluploader import (
+from calendarsync import (
     CalendarSynchronizer, CalDAVUploadAdapter,  ExchangeUploadAdapter, CampusCalenderAdapter, ICalendarAdapter,
     CalendarSynchronizerError
 )
@@ -47,12 +47,12 @@ if __name__ == '__main__':
     # Set up logger
     logging.basicConfig(format='%(asctime)s %(levelname)s: %(name)s: %(message)s', level=logging.INFO,
                         datefmt='%Y-%m-%d %H:%M:%S')
-    log = logging.getLogger('cacaluploader')
+    log = logging.getLogger('calendarsync')
 
     # Parse command line
     if len(sys.argv) != 2:
         log.error('Error: Incorrect use!')
-        log.info(' cacaluploader <config-file>')
+        log.info(' calendarsync <config-file>')
         exit()
     config_file = sys.argv[1]
 
