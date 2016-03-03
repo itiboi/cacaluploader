@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from logging import getLogger
 
 from .event import Event
+from .exceptions import SourceRetrievalError, InvalidCredentialsError
 
 log = getLogger(__name__)
 
@@ -24,6 +25,7 @@ class CalendarSourceAdapter(object):
         """
         Establish connection to calendar and fetches the events. Will be automatically called when accessing events
         without a previous call.
+        :raise SourceRetrievalError: Raised if connection to the calendar failed.
         """
         raise NotImplementedError()
 
@@ -71,13 +73,6 @@ class CalendarSourceAdapter(object):
         return last
 
 
-class CampusOfficeAuthorizationError(Exception):
-    """The adapter is unable to login into CampusOffice with given matriculation number and password."""
-
-    def __str__(self):
-        return 'CampusOffice login failed: Maybe invalid username/password?'
-
-
 class CampusCalenderAdapter(CalendarSourceAdapter):
     """Adapter to fetch all events of the CampusOffice calendar of a given time period."""
 
@@ -121,44 +116,48 @@ class CampusCalenderAdapter(CalendarSourceAdapter):
 
     def retrieve_events(self):
         """
-        :raise requests.RequestException: Raised if connection to CampusOffice failed.
-        :raise CampusOfficeAuthorizationError: Raised if CampusOffice login failed.
+        :raise InvalidCredentialsError: Raised if CampusOffice login failed.
         """
-        cls = CampusCalenderAdapter
-        # Create session which cares about cookies
-        session = requests.Session()
+        try:
+            cls = CampusCalenderAdapter
+            # Create session which cares about cookies
+            session = requests.Session()
 
-        # Fetch base page for session cookies
-        log.info('Fetch base page for session cookie')
-        req = session.get(cls._campus_base_url)
-        req.raise_for_status()
+            # Fetch base page for session cookies
+            log.info('Fetch base page for session cookie')
+            req = session.get(cls._campus_base_url)
+            req.raise_for_status()
 
-        # Log in and validating session cookies
-        log.info('Validate session by logging in')
-        values = {'u': self.matriculation_number,
-                  'p': self.campus_password}
-        req = session.post(cls._campus_base_url + cls._campus_login_url, data=values)
-        req.raise_for_status()
-        if 'loginfailed' in req.history[0].headers['location']:
-            raise CampusOfficeAuthorizationError()
+            # Log in and validating session cookies
+            log.info('Validate session by logging in')
+            values = {'u': self.matriculation_number,
+                      'p': self.campus_password}
+            req = session.post(cls._campus_base_url + cls._campus_login_url, data=values)
+            req.raise_for_status()
+            if 'loginfailed' in req.history[0].headers['location']:
+                raise InvalidCredentialsError('CampusOffice login failed: Maybe invalid username/password?')
 
-        # Retrieve calendar
-        log.info('Retrieve calendar')
-        req = session.get(cls._campus_base_url + cls._campus_cal_url.format(start=self._start_time, end=self._end_time))
-        req.raise_for_status()
+            # Retrieve calendar
+            log.info('Retrieve calendar')
+            req = session.get(cls._campus_base_url + cls._campus_cal_url.format(start=self._start_time, end=self._end_time))
+            req.raise_for_status()
 
-        # Log out
-        log.info('Invalidating session by logging out')
-        session.get(cls._campus_base_url + cls._campus_logout_url)
+            # Log out
+            log.info('Invalidating session by logging out')
+            session.get(cls._campus_base_url + cls._campus_logout_url)
 
-        # Parse calendar with forced utf-8
-        log.info('Parse calendar')
-        req.encoding = 'utf-8'
-        calendar = icalendar.Calendar.from_ical(req.text)
+            # Parse calendar with forced utf-8
+            log.info('Parse calendar')
+            req.encoding = 'utf-8'
+            calendar = icalendar.Calendar.from_ical(req.text)
 
-        # Remove all components which are no events
-        events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
-        self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))
+            # Remove all components which are no events
+            events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
+            self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))
+        except ValueError as ex:
+            raise SourceRetrievalError('Failed to access CampusOffice calendar: Maybe no events are available?') from ex
+        except requests.RequestException as ex:
+            raise SourceRetrievalError('Failed to request CampusOffice calendar: {0}.'.format(ex)) from ex
 
     @property
     def start_time(self) -> datetime:
@@ -185,19 +184,19 @@ class ICalendarAdapter(CalendarSourceAdapter):
         self._url = url
 
     def retrieve_events(self):
-        """
-        :raise requests.RequestException: Raised if connection to calendar failed.
-        """
-        # Retrieve calendar
-        log.info('Retrieve calendar')
-        req = requests.get(self._url)
-        req.raise_for_status()
+        try:
+            # Retrieve calendar
+            log.info('Retrieve calendar')
+            req = requests.get(self._url)
+            req.raise_for_status()
 
-        # Parse calendar with forced utf-8
-        log.info('Parse calendar')
-        req.encoding = 'utf-8'
-        calendar = icalendar.Calendar.from_ical(req.text)
+            # Parse calendar with forced utf-8
+            log.info('Parse calendar')
+            req.encoding = 'utf-8'
+            calendar = icalendar.Calendar.from_ical(req.text)
 
-        # Remove all components which are no events
-        events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
-        self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))
+            # Remove all components which are no events
+            events = filter(lambda e: isinstance(e, icalendar.Event), calendar.subcomponents)
+            self._events = list(map(lambda e: Event.from_ical_event(e, self.uid), events))
+        except requests.RequestException as ex:
+            raise SourceRetrievalError('Failed to request calendar: {0}.'.format(ex)) from ex

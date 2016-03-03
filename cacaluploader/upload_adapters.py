@@ -7,6 +7,7 @@ import re
 from datetime import datetime
 
 from .event import Event
+from .exceptions import CalendarConnectionError, EventRetrievalError, EventUploadError, EventDeletionError
 
 
 class CalendarUploadAdapter(object):
@@ -15,7 +16,10 @@ class CalendarUploadAdapter(object):
     _separator = '-|-'
 
     def connect(self):
-        """Establish connection to upload calendar."""
+        """
+        Establish connection to upload calendar.
+        :raise CalendarConnectionError: Raised when the connection failed.
+        """
         raise NotImplementedError()
 
     def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
@@ -26,6 +30,7 @@ class CalendarUploadAdapter(object):
         :return: List of all events in time period in format (calendar uid, event uid). Calendar uid will be None
                  if unknown.
         :rtype: list[(str, str)]
+        :raise EventRetrievalError: Raised when an error occurred during the retrieval.
         """
         raise NotImplementedError()
 
@@ -34,6 +39,7 @@ class CalendarUploadAdapter(object):
         Remove given event from calendar.
         :param cal_uid: Calender id of event to delete. Can be None.
         :param ev_uid: Event id of calendar to remove.
+        :raise EventDeletionError: Raised when the removing of the event failed.
         """
         raise NotImplementedError()
 
@@ -41,6 +47,7 @@ class CalendarUploadAdapter(object):
         """
         Create a new event with given values in calendar.
         :param event: Event to add
+        :raise EventUploadError: Raised when the uploading of the event failed.
         """
         raise NotImplementedError()
 
@@ -62,71 +69,72 @@ class CalDAVUploadAdapter(CalendarUploadAdapter):
         self.events = None
 
     def connect(self):
-        """
-        :raise caldav.error.AuthorizationError: Raised if username or password are incorrect.
-        :raise caldav.error.NotFoundError: Raised if calendar could not be found.
-        """
-        client = caldav.DAVClient(self.url, username=self.username, password=self.password)
-        principal = caldav.Principal(client)
+        try:
+            client = caldav.DAVClient(self.url, username=self.username, password=self.password)
+            principal = caldav.Principal(client)
 
-        # Search for given calendar
-        for c in principal.calendars():
-            url = str(c.url)
-            if self.url == url:
-                self.calendar = c
-                return
+            # Search for given calendar
+            for c in principal.calendars():
+                url = str(c.url)
+                if self.url == url:
+                    self.calendar = c
+                    return
 
-        # No calendar found (should normally not happen; principal should have raised error)
-        raise caldav.error.NotFoundError('Could not find calendar with given url')
+            # No calendar found (should normally not happen; principal should have raised error)
+            raise caldav.error.NotFoundError('Could not find calendar with given url')
+        except caldav.error.AuthorizationError as ex:
+            raise CalendarConnectionError('Authentication for CalDAV calendar failed') from ex
+        except caldav.error.NotFoundError as ex:
+            raise CalendarConnectionError('CalDAV calendar {0} was not found', self.url) from ex
 
     def retrieve_event_ids(self, start_time: datetime, end_time: datetime):
-        """
-        :raise caldav.error.ReportError: Raised if list of existing events in time period could not be loaded.
-        """
-        self.events = self.calendar.date_search(start_time, end_time)
+        try:
+            self.events = self.calendar.date_search(start_time, end_time)
 
-        def extractor(event):
-            raw_id = event.instance.vevent.uid.value
-            splitted_id = raw_id.split(CalendarUploadAdapter._separator)
-            if len(splitted_id) == 1:
-                splitted_id.insert(0, None)
-            return tuple(splitted_id)
+            def extractor(event):
+                raw_id = event.instance.vevent.uid.value
+                splitted_id = raw_id.split(CalendarUploadAdapter._separator)
+                if len(splitted_id) == 1:
+                    splitted_id.insert(0, None)
+                return tuple(splitted_id)
 
-        return list(map(extractor, self.events))
+            return list(map(extractor, self.events))
+        except caldav.error.ReportError as ex:
+            raise EventRetrievalError('Could not retrieve events: {0}'.format(ex)) from ex
 
     def delete_event(self, cal_uid: str, ev_uid: str):
-        """
-        :raise caldav.error.DeleteError: Raised if removing of already existing event failed.
-        """
-        # Compute real event id
-        uid = ev_uid
-        if cal_uid is not None:
-            uid = cal_uid + CalendarUploadAdapter._separator + uid
+        try:
+            # Compute real event id
+            uid = ev_uid
+            if cal_uid is not None:
+                uid = cal_uid + CalendarUploadAdapter._separator + uid
 
-        event = filter(lambda x: x.instance.vevent.uid.value == uid, self.events)
-        for e in event:
-            e.delete()
+            event = filter(lambda x: x.instance.vevent.uid.value == uid, self.events)
+            for e in event:
+                e.delete()
+        except caldav.error.DeleteError as ex:
+            raise EventDeletionError('Could not remove event from calendar: {0}'.format(ex)) from ex
 
     def add_event(self, event: Event):
-        """
-        :raise caldav.error.PutError: Raised if upload of an event failed.
-        """
-        # Create iCal representation of event
-        new_event = icalendar.Event()
-        new_event.add('uid', event.calender_uid + CalendarUploadAdapter._separator + event.uid)
-        new_event.add('summary', event.title)
-        new_event.add('location', event.location)
+        try:
+            # Create iCal representation of event
+            new_event = icalendar.Event()
+            new_event.add('uid', event.calender_uid + CalendarUploadAdapter._separator + event.uid)
+            new_event.add('summary', event.title)
+            new_event.add('location', event.location)
 
-        # Convert to UTC to avoid DST hassles
-        utc = pytz.timezone('UTC')
-        new_event.add('dtstart', event.start_time.astimezone(utc))
-        new_event.add('dtend', event.end_time.astimezone(utc))
+            # Convert to UTC to avoid DST hassles
+            utc = pytz.timezone('UTC')
+            new_event.add('dtstart', event.start_time.astimezone(utc))
+            new_event.add('dtend', event.end_time.astimezone(utc))
 
-        event_cal = icalendar.Calendar()
-        event_cal.add_component(new_event)
+            event_cal = icalendar.Calendar()
+            event_cal.add_component(new_event)
 
-        # Add it
-        self.calendar.add_event(event_cal.to_ical())
+            # Add it
+            self.calendar.add_event(event_cal.to_ical())
+        except caldav.error.PutError as ex:
+            raise EventUploadError('Could not upload event to calendar: {0}'.format(ex)) from ex
 
 
 # TODO: Complete documentation
@@ -164,7 +172,7 @@ class ExchangeUploadAdapter(CalendarUploadAdapter):
 
             # Check if calendar was not found
             if calendar_id is None:
-                raise caldav.error.NotFoundError('Could not find calendar with given url')
+                raise CalendarConnectionError('Could not find calendar with given id')
 
             self.calendar = service.calendar(id=calendar_id)
         else:

@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding=utf-8
 
-import caldav
 import logging
-import requests
 import sys
 
 from datetime import datetime
 from xml.etree import ElementTree
 
-from cacaluploader import CalendarSynchronizer, CampusOfficeAuthorizationError, CalDAVUploadAdapter, \
-    ExchangeUploadAdapter, CampusCalenderAdapter, ICalendarAdapter
+from cacaluploader import (
+    CalendarSynchronizer, CalDAVUploadAdapter,  ExchangeUploadAdapter, CampusCalenderAdapter, ICalendarAdapter,
+    CalendarSynchronizerError
+)
 
 log = logging.getLogger(__name__)
 
@@ -56,74 +56,63 @@ if __name__ == '__main__':
         exit()
     config_file = sys.argv[1]
 
-    try:
-        # Parse config file
-        config = ElementTree.parse(config_file)
+    # Parse config file
+    config = ElementTree.parse(config_file)
 
-        # Parse source
-        sources = list()
-        for source in config.findall('/source'):
-            source_type = source.get('type', None)
-            uid = source.get('id', None)
+    # Parse source
+    sources = list()
+    for source in config.findall('./source'):
+        source_type = source.get('type', None)
+        uid = source.get('id', None)
 
-            if source_type == 'campusoffice':
-                mat_number = source.findtext('matno')
-                campus_pass = source.findtext('password')
+        if source_type == 'campusoffice':
+            mat_number = source.findtext('matno')
+            campus_pass = source.findtext('password')
 
-                start_time = None
-                end_time = None
-                period = source.find('period')
-                if period is not None:
+            start_time = None
+            end_time = None
+            period = source.find('period')
+            if period is not None:
+                try:
                     start_time = datetime.strptime(period.get('start'), '%Y-%m-%d')
                     end_time = datetime.strptime(period.get('end'), '%Y-%m-%d')
+                except ValueError as e:
+                    log.error('Could not parse time period: %s', e)
+                    exit()
 
-                sources.append(CampusCalenderAdapter(mat_number, campus_pass, uid=uid))
-            elif source_type == 'icalendar':
-                url = source.findtext('url')
-                sources.append(ICalendarAdapter(url, uid))
-            else:
-                raise ValueError('Unknown source calendar specified: %s!' % source_type)
-
-        # Parse upload calendar
-        target = config.find('/target')
-
-        target_type = target.get('type', None)
-        if target_type == 'caldav':
-            url = target.findtext('./url')
-            username = target.findtext('./username')
-            password = target.findtext('./password')
-            upload_adapter = CalDAVUploadAdapter(url, username, password)
-        elif target_type == 'exchange':
-            ews_url = target.findtext('./ews_url')
-            calendar_id = target.findtext('./calendar_id')
-            username = target.findtext('./username')
-            password = target.findtext('./password')
-
-            if calendar_id is None:
-                upload_adapter = ExchangeUploadAdapter(ews_url, username, password)
-            else:
-                upload_adapter = ExchangeUploadAdapter(ews_url, username, password, calendar_id)
+            sources.append(CampusCalenderAdapter(mat_number, campus_pass, uid=uid))
+        elif source_type == 'icalendar':
+            url = source.findtext('url')
+            sources.append(ICalendarAdapter(url, uid))
         else:
-            raise RuntimeError('Unknown target adapter specified: %s!' % target_type)
+            raise ValueError('Unknown source calendar specified: %s!' % source_type)
 
-        # Start upload
-        for source_adapter in sources:
-            try:
-                uploader = CalendarSynchronizer(source_adapter, upload_adapter)
-                uploader.upload()
-            except (requests.RequestException, CampusOfficeAuthorizationError) as e:
-                log.error('Could not retrieve CampusOffice calendar: %s', e)
-            except caldav.error.AuthorizationError as e:
-                log.error('Could not access CalDAV calendar: Authorization failed')
-            except caldav.error.NotFoundError as e:
-                log.error('Could not find CalDAV calendar')
-            except caldav.error.ReportError as e:
-                log.error('Could not retrieve list of already existing events in CalDAV calendar')
-            except caldav.error.DeleteError as e:
-                log.error('Could not remove already existing event in CalDAV calendar')
-            except caldav.error.PutError as e:
-                log.error('Could not upload new event to CalDAV calendar')
+    # Parse upload calendar
+    target = config.find('./target')
 
-    # Maybe catch many other things too :(
-    except ValueError as e:
-        log.error('Could not parse time period: %s', e)
+    target_type = target.get('type', None)
+    if target_type == 'caldav':
+        url = target.findtext('./url')
+        username = target.findtext('./username')
+        password = target.findtext('./password')
+        upload_adapter = CalDAVUploadAdapter(url, username, password)
+    elif target_type == 'exchange':
+        ews_url = target.findtext('./ews_url')
+        calendar_id = target.findtext('./calendar_id')
+        username = target.findtext('./username')
+        password = target.findtext('./password')
+
+        if calendar_id is None:
+            upload_adapter = ExchangeUploadAdapter(ews_url, username, password)
+        else:
+            upload_adapter = ExchangeUploadAdapter(ews_url, username, password, calendar_id)
+    else:
+        raise RuntimeError('Unknown target adapter specified: %s!' % target_type)
+
+    # Start upload
+    for source_adapter in sources:
+        try:
+            CalendarSynchronizer(source_adapter, upload_adapter).upload()
+        except CalendarSynchronizerError as e:
+            log.error(e)
+
